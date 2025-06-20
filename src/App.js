@@ -705,26 +705,28 @@ function App() {
                 <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 24 }}>
                   <TrafficButton checked={trafficOn} onChange={setTrafficOn} />
                 </div>
-                <div className="route-summary">
-                  <div className="summary-item">
-                    <span className="summary-label">Distance:</span>
-                    <span className="summary-value">{directions.routes[0].legs[0].distance.text}</span>
+                <div className="route-summary" style={{display:'flex', alignItems:'center', justifyContent:'space-between', position:'relative'}}>
+                  <div style={{display:'flex', gap:30}}>
+                    <div className="summary-item">
+                      <span className="summary-label">Distance:</span>
+                      <span className="summary-value">{directions.routes[0].legs[0].distance.text}</span>
+                    </div>
+                    <div className="summary-item">
+                      <span className="summary-label">Steps:</span>
+                      <span className="summary-value">{directions.routes[0].legs[0].steps.length}</span>
+                    </div>
+                    <div className="summary-item">
+                      <span className="summary-label">Complex Steps:</span>
+                      <span className="summary-value">{countComplexSteps(directions.routes[0].legs[0].steps)}</span>
+                    </div>
+                    <div className="summary-item">
+                      <span className="summary-label">Reference Steps:</span>
+                      <span className="summary-value">{countReferenceSteps(directions.routes[0].legs[0].steps)}</span>
+                    </div>
                   </div>
-                  <div className="summary-item">
-                    <span className="summary-label">Duration:</span>
-                    <span className="summary-value">{directions.routes[0].legs[0].duration.text}</span>
-                  </div>
-                  <div className="summary-item">
-                    <span className="summary-label">Steps:</span>
-                    <span className="summary-value">{directions.routes[0].legs[0].steps.length}</span>
-                  </div>
-                  <div className="summary-item">
-                    <span className="summary-label">Complex Steps:</span>
-                    <span className="summary-value">{countComplexSteps(directions.routes[0].legs[0].steps)}</span>
-                  </div>
-                  <div className="summary-item">
-                    <span className="summary-label">Reference Steps:</span>
-                    <span className="summary-value">{countReferenceSteps(directions.routes[0].legs[0].steps)}</span>
+                  <div style={{marginLeft:'auto', minWidth:120, textAlign:'center', display:'flex', flexDirection:'column', alignItems:'center'}}>
+                    <span className="summary-label" style={{color:'#f0f0f0', fontWeight:400, fontSize:'0.9rem', marginRight:0}}>Duration:</span>
+                    <span className="summary-value" style={{fontWeight:700, fontSize:'1.2rem', color:'#fff'}}>{directions.routes[0].legs[0].duration.text}</span>
                   </div>
                 </div>
                 <div className="directions-content">
