@@ -190,7 +190,7 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [google, setGoogle] = useState(null);
-  const [trafficOn, setTrafficOn] = useState(true);
+  const [trafficOn, setTrafficOn] = useState(false);
   const mapRef = useRef(null);
   const mapInstanceRef = useRef(null);
   const directionsRendererRef = useRef(null);
@@ -213,13 +213,13 @@ function App() {
   }, [selectedTier]);
 
   useEffect(() => {
+    if (view !== 'directions') return;
     const initMap = async () => {
       const loader = new Loader({
         apiKey: process.env.REACT_APP_GOOGLE_MAPS_API_KEY,
         version: 'weekly',
         libraries: ['places']
       });
-
       try {
         const googleInstance = await loader.load();
         setGoogle(googleInstance);
@@ -230,91 +230,28 @@ function App() {
             { elementType: "geometry", stylers: [{ color: "#242f3e" }] },
             { elementType: "labels.text.stroke", stylers: [{ color: "#242f3e" }] },
             { elementType: "labels.text.fill", stylers: [{ color: "#746855" }] },
-            {
-              featureType: "administrative.locality",
-              elementType: "labels.text.fill",
-              stylers: [{ color: "#d59563" }],
-            },
-            {
-              featureType: "poi",
-              elementType: "labels.text.fill",
-              stylers: [{ color: "#d59563" }],
-            },
-            {
-              featureType: "poi.park",
-              elementType: "geometry",
-              stylers: [{ color: "#263c3f" }],
-            },
-            {
-              featureType: "poi.park",
-              elementType: "labels.text.fill",
-              stylers: [{ color: "#6b9a76" }],
-            },
-            {
-              featureType: "road",
-              elementType: "geometry",
-              stylers: [{ color: "#38414e" }],
-            },
-            {
-              featureType: "road",
-              elementType: "geometry.stroke",
-              stylers: [{ color: "#212a37" }],
-            },
-            {
-              featureType: "road",
-              elementType: "labels.text.fill",
-              stylers: [{ color: "#9ca5b3" }],
-            },
-            {
-              featureType: "road.highway",
-              elementType: "geometry",
-              stylers: [{ color: "#746855" }],
-            },
-            {
-              featureType: "road.highway",
-              elementType: "geometry.stroke",
-              stylers: [{ color: "#1f2835" }],
-            },
-            {
-              featureType: "road.highway",
-              elementType: "labels.text.fill",
-              stylers: [{ color: "#f3d19c" }],
-            },
-            {
-              featureType: "transit",
-              elementType: "geometry",
-              stylers: [{ color: "#2f3948" }],
-            },
-            {
-              featureType: "transit.station",
-              elementType: "labels.text.fill",
-              stylers: [{ color: "#d59563" }],
-            },
-            {
-              featureType: "water",
-              elementType: "geometry",
-              stylers: [{ color: "#17263c" }],
-            },
-            {
-              featureType: "water",
-              elementType: "labels.text.fill",
-              stylers: [{ color: "#515c6d" }],
-            },
-            {
-              featureType: "water",
-              elementType: "labels.text.stroke",
-              stylers: [{ color: "#17263c" }],
-            },
+            { featureType: "administrative.locality", elementType: "labels.text.fill", stylers: [{ color: "#d59563" }] },
+            { featureType: "poi", elementType: "labels.text.fill", stylers: [{ color: "#d59563" }] },
+            { featureType: "poi.park", elementType: "geometry", stylers: [{ color: "#263c3f" }] },
+            { featureType: "poi.park", elementType: "labels.text.fill", stylers: [{ color: "#6b9a76" }] },
+            { featureType: "road", elementType: "geometry", stylers: [{ color: "#38414e" }] },
+            { featureType: "road", elementType: "geometry.stroke", stylers: [{ color: "#212a37" }] },
+            { featureType: "road", elementType: "labels.text.fill", stylers: [{ color: "#9ca5b3" }] },
+            { featureType: "road.highway", elementType: "geometry", stylers: [{ color: "#746855" }] },
+            { featureType: "road.highway", elementType: "geometry.stroke", stylers: [{ color: "#1f2835" }] },
+            { featureType: "road.highway", elementType: "labels.text.fill", stylers: [{ color: "#f3d19c" }] },
+            { featureType: "transit", elementType: "geometry", stylers: [{ color: "#2f3948" }] },
+            { featureType: "transit.station", elementType: "labels.text.fill", stylers: [{ color: "#d59563" }] },
+            { featureType: "water", elementType: "geometry", stylers: [{ color: "#17263c" }] },
+            { featureType: "water", elementType: "labels.text.fill", stylers: [{ color: "#515c6d" }] },
+            { featureType: "water", elementType: "labels.text.stroke", stylers: [{ color: "#17263c" }] },
           ],
         });
         mapInstanceRef.current = map;
-
-        // Enable the Traffic Layer if trafficOn is true
         trafficLayerRef.current = new googleInstance.maps.TrafficLayer();
         if (trafficOn) {
           trafficLayerRef.current.setMap(map);
         }
-
         directionsRendererRef.current = new googleInstance.maps.DirectionsRenderer({
           map: map,
           suppressMarkers: false
@@ -324,14 +261,13 @@ function App() {
         setError('Failed to load Google Maps. Please check your API key.');
       }
     };
-
     if (process.env.REACT_APP_GOOGLE_MAPS_API_KEY) {
       initMap();
     } else {
       setError('Google Maps API key not found. Please set REACT_APP_GOOGLE_MAPS_API_KEY in your environment variables.');
     }
     // eslint-disable-next-line
-  }, []);
+  }, [view]);
 
   // Effect to toggle traffic layer on/off
   useEffect(() => {
@@ -343,6 +279,18 @@ function App() {
       }
     }
   }, [trafficOn, google]);
+
+  // Add a useEffect to recenter the map when selectedCity changes and view is 'directions'
+  useEffect(() => {
+    if (view !== 'directions') return;
+    if (!mapInstanceRef.current) return;
+    const bounds = getCityBounds(selectedCity);
+    const centerLat = ((bounds.minLat + bounds.maxLat) / 2).toFixed(4);
+    const centerLon = ((bounds.minLon + bounds.maxLon) / 2).toFixed(4);
+    const zoom = bounds.tier === 'Tier III' ? 14 : 12;
+    mapInstanceRef.current.setCenter({ lat: parseFloat(centerLat), lng: parseFloat(centerLon) });
+    mapInstanceRef.current.setZoom(zoom);
+  }, [selectedCity, view]);
 
   const getDirections = async () => {
     if (!startLat || !startLon || !endLat || !endLon) {
