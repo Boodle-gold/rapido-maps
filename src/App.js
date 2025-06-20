@@ -65,6 +65,74 @@ function TrafficButton({ checked, onChange }) {
   );
 }
 
+function HamburgerMenu({ currentView, setView }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="hamburger-menu-container">
+      <button className="hamburger-btn" onClick={() => setOpen(o => !o)} aria-label="Open menu">
+        <span className="hamburger-icon">☰</span>
+      </button>
+      {open && (
+        <div className="hamburger-dropdown">
+          <div
+            className={`hamburger-item${currentView === 'directions' ? ' selected' : ''}`}
+            onClick={() => { setView('directions'); setOpen(false); }}
+          >
+            Directions
+          </div>
+          <div
+            className={`hamburger-item${currentView === 'stats' ? ' selected' : ''}`}
+            onClick={() => { setView('stats'); setOpen(false); }}
+          >
+            Directions Stats
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TierSummaryBox({ results }) {
+  // Group by tier
+  const grouped = {};
+  results.forEach(r => {
+    if (!grouped[r.tier]) grouped[r.tier] = [];
+    grouped[r.tier].push(r);
+  });
+  // Compute averages for each tier using the correct fields
+  const summary = ['Tier I','Tier II','Tier III'].map(tier => {
+    const arr = grouped[tier] || [];
+    if (!arr.length) return {tier, distance:'-', complex:'-', reference:'-', total:'-'};
+    let sumDist=0, sumComp=0, sumRef=0, sumTot=0;
+    arr.forEach(r => {
+      sumDist += +r.avgDistance;
+      sumComp += +r.avgComplex;
+      sumRef += +r.avgReference;
+      sumTot += +r.avgTotal;
+    });
+    return {
+      tier,
+      distance: (sumDist/arr.length).toFixed(2),
+      complex: (sumComp/arr.length).toFixed(1),
+      reference: (sumRef/arr.length).toFixed(1),
+      total: (sumTot/arr.length).toFixed(1)
+    };
+  });
+  return (
+    <div style={{display:'flex', gap:32, margin:'24px 0', justifyContent:'center'}}>
+      {summary.map(s => (
+        <div key={s.tier} style={{background:'#111', border:'2px solid #fff', padding:'16px 32px', minWidth:180, color:'#fff', fontFamily:'monospace', fontSize:18, fontWeight:'bold', textAlign:'center'}}>
+          <div style={{fontSize:22, marginBottom:8, color:'#ffff00'}}>{s.tier}</div>
+          <div>Avg Distance: <span style={{color:'#ffff00'}}>{s.distance}</span> km</div>
+          <div>Complex Steps: <span style={{color:'#ffff00'}}>{s.complex}</span></div>
+          <div>Reference Steps: <span style={{color:'#ffff00'}}>{s.reference}</span></div>
+          <div>Average Total Steps per City: <span style={{color:'#ffff00'}}>{s.total}</span></div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function App() {
   const cityBounds = {
     // Tier I
@@ -127,6 +195,9 @@ function App() {
   const mapInstanceRef = useRef(null);
   const directionsRendererRef = useRef(null);
   const trafficLayerRef = useRef(null);
+  const [view, setView] = useState('directions');
+  const [statsLoading, setStatsLoading] = useState(false);
+  const [statsResults, setStatsResults] = useState([]);
 
   // Filter cities by selected tier
   const filteredCities = Object.keys(cityBounds).filter(
@@ -477,157 +548,287 @@ function App() {
     if (!steps) return 0;
     return steps.filter(step => {
       const instr = (step.instructions || '').toLowerCase();
-      return instr.includes(' by ') || instr.includes(' toward ');
+      return instr.includes(' by ') || instr.includes(' toward ') || instr.includes(' at ');
     }).length;
   }
 
+  // Helper to run a single experiment for a city
+  async function runSingleTrial(city) {
+    const bounds = getCityBounds(city);
+    const { minLat, maxLat, minLon, maxLon } = bounds;
+    const randomLat1 = (Math.random() * (maxLat - minLat) + minLat).toFixed(4);
+    const randomLon1 = (Math.random() * (maxLon - minLon) + minLon).toFixed(4);
+    const randomLat2 = (Math.random() * (maxLat - minLat) + minLat).toFixed(4);
+    const randomLon2 = (Math.random() * (maxLon - minLon) + minLon).toFixed(4);
+    // Use the same API logic as getDirections
+    const requestBody = {
+      origin: { location: { latLng: { latitude: parseFloat(randomLat1), longitude: parseFloat(randomLon1) } } },
+      destination: { location: { latLng: { latitude: parseFloat(randomLat2), longitude: parseFloat(randomLon2) } } },
+      travelMode: 'DRIVE',
+      routingPreference: 'TRAFFIC_AWARE',
+      computeAlternativeRoutes: false,
+      routeModifiers: { avoidTolls: false, avoidHighways: false },
+      languageCode: 'en-US',
+      units: 'METRIC'
+    };
+    try {
+      const response = await fetch(
+        `https://routes.googleapis.com/directions/v2:computeRoutes?key=${process.env.REACT_APP_GOOGLE_MAPS_API_KEY}`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Goog-Api-Key': process.env.REACT_APP_GOOGLE_MAPS_API_KEY,
+            'X-Goog-FieldMask': 'routes.duration,routes.distanceMeters,routes.legs.steps,routes.legs.staticDuration,routes.legs.polyline,routes.polyline.encodedPolyline'
+          },
+          body: JSON.stringify(requestBody)
+        }
+      );
+      if (!response.ok) return null;
+      const result = await response.json();
+      if (!result.routes || !result.routes.length) return null;
+      const steps = result.routes[0].legs[0].steps.map(step => ({
+        instructions: step.navigationInstruction?.instructions || '',
+        distance: { text: `${(step.distanceMeters / 1000).toFixed(1)} km` },
+        duration: { text: `${Math.round(parseInt(step.staticDuration, 10) / 60)} min` }
+      }));
+      return {
+        distance: result.routes[0].distanceMeters / 1000,
+        complexSteps: countComplexSteps(steps),
+        referenceSteps: countReferenceSteps(steps),
+        totalSteps: steps.length
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  // Run all trials for all cities/tiers
+  async function runAllTrials() {
+    setStatsLoading(true);
+    setStatsResults([]);
+    const results = [];
+    for (const tier of tiers) {
+      for (const city of Object.keys(cityBounds).filter(c => cityBounds[c].tier === tier)) {
+        const cityResults = [];
+        for (let i = 0; i < 30; ++i) {
+          const trial = await runSingleTrial(city);
+          if (trial) cityResults.push(trial);
+        }
+        if (cityResults.length) {
+          // Remove outliers using IQR on distance
+          const distances = cityResults.map(r => r.distance).sort((a, b) => a - b);
+          const q1 = distances[Math.floor((distances.length - 1) * 0.25)];
+          const q3 = distances[Math.floor((distances.length - 1) * 0.75)];
+          const iqr = q3 - q1;
+          const lower = q1 - 1.5 * iqr;
+          const upper = q3 + 1.5 * iqr;
+          const filtered = cityResults.filter(r => r.distance >= lower && r.distance <= upper);
+          const avg = arr => arr.reduce((a, b) => a + b, 0) / arr.length;
+          results.push({
+            city,
+            tier,
+            avgDistance: filtered.length ? avg(filtered.map(r => r.distance)).toFixed(2) : '-',
+            avgComplex: filtered.length ? avg(filtered.map(r => r.complexSteps)).toFixed(1) : '-',
+            avgReference: filtered.length ? avg(filtered.map(r => r.referenceSteps)).toFixed(1) : '-',
+            avgTotal: filtered.length ? avg(filtered.map(r => r.totalSteps)).toFixed(1) : '-',
+            trials: filtered
+          });
+        }
+      }
+    }
+    setStatsResults(results);
+    setStatsLoading(false);
+  }
+
+  // Find average total steps for all cities
+  const avgTotalSteps = statsResults.length ? (statsResults.reduce((acc, r) => acc + (+r.avgTotal), 0) / statsResults.length).toFixed(1) : '-';
+
   return (
     <div className="app">
+      <HamburgerMenu currentView={view} setView={setView} />
       <div className="container">
-        <header className="header">
-          <h1 className="title">Directions</h1>
-          <p className="subtitle">Using Routes API</p>
-        </header>
-
-        <div className="input-section">
-          <div className="dropdown-row">
-            <div style={{ marginBottom: 0, marginRight: 24 }}>
-              <label htmlFor="tier-select" style={{ fontWeight: 700, color: '#f0f0f0', fontSize: '1rem', marginRight: 8 }}>
-                Tier:
-              </label>
-              <CityDropdown
-                options={tiers}
-                value={selectedTier}
-                onChange={setSelectedTier}
-              />
-            </div>
-            <div style={{ marginBottom: 0 }}>
-              <label htmlFor="city-select" style={{ fontWeight: 700, color: '#f0f0f0', fontSize: '1rem', marginRight: 8 }}>
-                City:
-              </label>
-              <CityDropdown
-                options={filteredCities}
-                value={selectedCity}
-                onChange={setSelectedCity}
-              />
-            </div>
-          </div>
-          <div className="input-group">
-            <h3>Start Point</h3>
-            <div className="input-row">
-              <input
-                type="number"
-                placeholder="Latitude"
-                value={startLat}
-                onChange={(e) => setStartLat(e.target.value)}
-                className="input-field"
-                step="any"
-              />
-              <input
-                type="number"
-                placeholder="Longitude"
-                value={startLon}
-                onChange={(e) => setStartLon(e.target.value)}
-                className="input-field"
-                step="any"
-              />
-            </div>
-          </div>
-
-          <div className="input-group">
-            <h3>End Point</h3>
-            <div className="input-row">
-              <input
-                type="number"
-                placeholder="Latitude"
-                value={endLat}
-                onChange={(e) => setEndLat(e.target.value)}
-                className="input-field"
-                step="any"
-              />
-              <input
-                type="number"
-                placeholder="Longitude"
-                value={endLon}
-                onChange={(e) => setEndLon(e.target.value)}
-                className="input-field"
-                step="any"
-              />
-            </div>
-          </div>
-
-          <div className="button-group">
-            <button
-              onClick={getDirections}
-              disabled={loading}
-              className="btn btn-primary"
-            >
-              {loading ? 'Getting Directions...' : 'Get Directions'}
-            </button>
-            <button
-              onClick={randomizeCoordinates}
-              className="btn btn-secondary"
-            >
-              Randomize
-            </button>
-            <button
-              onClick={clearDirections}
-              className="btn btn-secondary"
-            >
-              Clear
-            </button>
-          </div>
-
-          {error && (
-            <div className="error-message">
-              {error}
-            </div>
-          )}
-        </div>
-
-        <div className="map-container">
-          <div ref={mapRef} className="map" />
-        </div>
-
-        {directions && (
-          <div className="directions-panel">
-            <h3>Directions</h3>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 24 }}>
-              <TrafficButton checked={trafficOn} onChange={setTrafficOn} />
-            </div>
-            <div className="route-summary">
-              <div className="summary-item">
-                <span className="summary-label">Distance:</span>
-                <span className="summary-value">{directions.routes[0].legs[0].distance.text}</span>
+        {view === 'directions' && (
+          <header className="header">
+            <h1 className="title">Directions</h1>
+            <p className="subtitle">Using Routes API</p>
+          </header>
+        )}
+        {view === 'directions' ? (
+          <React.Fragment>
+            <div className="input-section">
+              <div className="dropdown-row">
+                <div style={{ marginBottom: 0, marginRight: 24 }}>
+                  <label htmlFor="tier-select" style={{ fontWeight: 700, color: '#f0f0f0', fontSize: '1rem', marginRight: 8 }}>
+                    Tier:
+                  </label>
+                  <CityDropdown
+                    options={tiers}
+                    value={selectedTier}
+                    onChange={setSelectedTier}
+                  />
+                </div>
+                <div style={{ marginBottom: 0 }}>
+                  <label htmlFor="city-select" style={{ fontWeight: 700, color: '#f0f0f0', fontSize: '1rem', marginRight: 8 }}>
+                    City:
+                  </label>
+                  <CityDropdown
+                    options={filteredCities}
+                    value={selectedCity}
+                    onChange={setSelectedCity}
+                  />
+                </div>
               </div>
-              <div className="summary-item">
-                <span className="summary-label">Duration:</span>
-                <span className="summary-value">{directions.routes[0].legs[0].duration.text}</span>
+              <div className="input-group">
+                <h3>Start Point</h3>
+                <div className="input-row">
+                  <input
+                    type="number"
+                    placeholder="Latitude"
+                    value={startLat}
+                    onChange={(e) => setStartLat(e.target.value)}
+                    className="input-field"
+                    step="any"
+                  />
+                  <input
+                    type="number"
+                    placeholder="Longitude"
+                    value={startLon}
+                    onChange={(e) => setStartLon(e.target.value)}
+                    className="input-field"
+                    step="any"
+                  />
+                </div>
               </div>
-              <div className="summary-item">
-                <span className="summary-label">Steps:</span>
-                <span className="summary-value">{directions.routes[0].legs[0].steps.length}</span>
+              <div className="input-group">
+                <h3>End Point</h3>
+                <div className="input-row">
+                  <input
+                    type="number"
+                    placeholder="Latitude"
+                    value={endLat}
+                    onChange={(e) => setEndLat(e.target.value)}
+                    className="input-field"
+                    step="any"
+                  />
+                  <input
+                    type="number"
+                    placeholder="Longitude"
+                    value={endLon}
+                    onChange={(e) => setEndLon(e.target.value)}
+                    className="input-field"
+                    step="any"
+                  />
+                </div>
               </div>
-              <div className="summary-item">
-                <span className="summary-label">Complex Steps:</span>
-                <span className="summary-value">{countComplexSteps(directions.routes[0].legs[0].steps)}</span>
+              <div className="button-group">
+                <button
+                  onClick={getDirections}
+                  disabled={loading}
+                  className="btn btn-primary"
+                >
+                  {loading ? 'Getting Directions...' : 'Get Directions'}
+                </button>
+                <button
+                  onClick={randomizeCoordinates}
+                  className="btn btn-secondary"
+                >
+                  Randomize
+                </button>
+                <button
+                  onClick={clearDirections}
+                  className="btn btn-secondary"
+                >
+                  Clear
+                </button>
               </div>
-              <div className="summary-item">
-                <span className="summary-label">Reference Steps:</span>
-                <span className="summary-value">{countReferenceSteps(directions.routes[0].legs[0].steps)}</span>
-              </div>
+              {error && (
+                <div className="error-message">
+                  {error}
+                </div>
+              )}
             </div>
-            <div className="directions-content">
-              {directions.routes[0]?.legs[0]?.steps?.map((step, index) => (
-                <div key={index} className="direction-step">
-                  <div className="step-number">{index + 1}</div>
-                  <div className="step-instruction">
-                    {step.instructions}
-                    {step.distance && <span className="step-distance"> ({step.distance.text})</span>}
+            <div className="map-container">
+              <div ref={mapRef} className="map" />
+            </div>
+            {directions && (
+              <div className="directions-panel">
+                <h3>Directions</h3>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 24 }}>
+                  <TrafficButton checked={trafficOn} onChange={setTrafficOn} />
+                </div>
+                <div className="route-summary">
+                  <div className="summary-item">
+                    <span className="summary-label">Distance:</span>
+                    <span className="summary-value">{directions.routes[0].legs[0].distance.text}</span>
+                  </div>
+                  <div className="summary-item">
+                    <span className="summary-label">Duration:</span>
+                    <span className="summary-value">{directions.routes[0].legs[0].duration.text}</span>
+                  </div>
+                  <div className="summary-item">
+                    <span className="summary-label">Steps:</span>
+                    <span className="summary-value">{directions.routes[0].legs[0].steps.length}</span>
+                  </div>
+                  <div className="summary-item">
+                    <span className="summary-label">Complex Steps:</span>
+                    <span className="summary-value">{countComplexSteps(directions.routes[0].legs[0].steps)}</span>
+                  </div>
+                  <div className="summary-item">
+                    <span className="summary-label">Reference Steps:</span>
+                    <span className="summary-value">{countReferenceSteps(directions.routes[0].legs[0].steps)}</span>
                   </div>
                 </div>
-              ))}
-            </div>
+                <div className="directions-content">
+                  {directions.routes[0]?.legs[0]?.steps?.map((step, index) => (
+                    <div key={index} className="direction-step">
+                      <div className="step-number">{index + 1}</div>
+                      <div className="step-instruction">
+                        {step.instructions}
+                        {step.distance && <span className="step-distance"> ({step.distance.text})</span>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </React.Fragment>
+        ) : (
+          <div className="stats-placeholder">
+            <h2>Directions Stats</h2>
+            <button className="btn btn-primary" onClick={runAllTrials} disabled={statsLoading} style={{marginBottom: 32}}>
+              {statsLoading ? 'Running Trials...' : 'Run Trials'}
+            </button>
+            {statsLoading && <div style={{color:'#ffff00', fontWeight:700, marginBottom:16}}>Running experiments for all cities and tiers...</div>}
+            {statsResults.length > 0 && (
+              <div className="stats-table-container">
+                <TierSummaryBox results={statsResults} />
+                <table className="stats-table">
+                  <thead>
+                    <tr>
+                      <th>Tier</th>
+                      <th>City</th>
+                      <th>Avg Distance (km)</th>
+                      <th>Avg Complex Steps</th>
+                      <th>Avg Reference Steps</th>
+                      <th>Avg Total Steps</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {statsResults.map(r => (
+                      <tr key={r.city}>
+                        <td>{r.tier}</td>
+                        <td>{r.city}</td>
+                        <td>{r.avgDistance}</td>
+                        <td>{r.avgComplex}</td>
+                        <td>{r.avgReference}</td>
+                        <td>{r.avgTotal}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         )}
       </div>
