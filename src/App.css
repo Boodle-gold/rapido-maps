@@ -640,5 +640,7 @@
   margin: 0;
 }
 .custom-number-input {
+  appearance: textfield;
+  -webkit-appearance: textfield;
   -moz-appearance: textfield;
 } 
