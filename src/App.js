@@ -198,6 +198,8 @@ function App() {
   const [view, setView] = useState('directions');
   const [statsLoading, setStatsLoading] = useState(false);
   const [statsResults, setStatsResults] = useState([]);
+  const [numTrials, setNumTrials] = useState(5);
+  const [numTrialsInput, setNumTrialsInput] = useState('5');
 
   // Filter cities by selected tier
   const filteredCities = Object.keys(cityBounds).filter(
@@ -556,22 +558,32 @@ function App() {
     setStatsLoading(true);
     setStatsResults([]);
     const results = [];
+    const trialsToRun = numTrials > 0 ? numTrials : 5;
     for (const tier of tiers) {
       for (const city of Object.keys(cityBounds).filter(c => cityBounds[c].tier === tier)) {
         const cityResults = [];
-        for (let i = 0; i < 10; ++i) {
+        for (let i = 0; i < trialsToRun; ++i) {
           const trial = await runSingleTrial(city);
           if (trial) cityResults.push(trial);
         }
         if (cityResults.length) {
-          // Remove outliers using IQR on distance
-          const distances = cityResults.map(r => r.distance).sort((a, b) => a - b);
-          const q1 = distances[Math.floor((distances.length - 1) * 0.25)];
-          const q3 = distances[Math.floor((distances.length - 1) * 0.75)];
-          const iqr = q3 - q1;
-          const lower = q1 - 1.5 * iqr;
-          const upper = q3 + 1.5 * iqr;
-          const filtered = cityResults.filter(r => r.distance >= lower && r.distance <= upper);
+          // Winsorize all fields (distance, complexSteps, referenceSteps, totalSteps)
+          function winsorize(arr, field) {
+            const sorted = arr.map(r => r[field]).sort((a, b) => a - b);
+            const lowerIdx = Math.floor(sorted.length * 0.05);
+            const upperIdx = Math.ceil(sorted.length * 0.95) - 1;
+            const lower = sorted[lowerIdx];
+            const upper = sorted[upperIdx];
+            return arr.map(r => ({
+              ...r,
+              [field]: Math.max(lower, Math.min(r[field], upper))
+            }));
+          }
+          let filtered = cityResults;
+          filtered = winsorize(filtered, 'distance');
+          filtered = winsorize(filtered, 'complexSteps');
+          filtered = winsorize(filtered, 'referenceSteps');
+          filtered = winsorize(filtered, 'totalSteps');
           const avg = arr => arr.reduce((a, b) => a + b, 0) / arr.length;
           results.push({
             city,
@@ -750,9 +762,59 @@ function App() {
           <React.Fragment>
             <div className="stats-placeholder">
               <h2>Directions Stats</h2>
-              <button className="btn btn-primary" onClick={runAllTrials} disabled={statsLoading} style={{marginBottom: 32}}>
-                {statsLoading ? 'Running Trials...' : 'Run Trials'}
-              </button>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16, marginTop: '24px', marginBottom: '32px' }}>
+                <button className="btn btn-primary" onClick={runAllTrials} disabled={statsLoading}>
+                  {statsLoading ? 'Running Trials...' : 'Run Trials'}
+                </button>
+                <label style={{ color: '#f0f0f0', fontWeight: 700, fontSize: '1rem', fontFamily: 'monospace', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  Trials per city:
+                  <input
+                    type="number"
+                    min="1"
+                    max="100"
+                    value={numTrialsInput}
+                    onChange={e => setNumTrialsInput(e.target.value)}
+                    onBlur={() => {
+                      const val = Number(numTrialsInput);
+                      if (!numTrialsInput || isNaN(val) || val < 1 || val > 30) {
+                        setNumTrials(5);
+                        setNumTrialsInput('5');
+                      } else {
+                        setNumTrials(Math.floor(val));
+                        setNumTrialsInput(String(Math.floor(val)));
+                      }
+                    }}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') {
+                        const val = Number(numTrialsInput);
+                        if (!numTrialsInput || isNaN(val) || val < 1 || val > 30) {
+                          setNumTrials(5);
+                          setNumTrialsInput('5');
+                        } else {
+                          setNumTrials(Math.floor(val));
+                          setNumTrialsInput(String(Math.floor(val)));
+                        }
+                      }
+                    }}
+                    className="custom-number-input"
+                    style={{
+                      background: '#1a1a1a',
+                      color: '#f0f0f0',
+                      border: '2px solid #f0f0f0',
+                      borderRadius: 0,
+                      fontFamily: 'monospace',
+                      fontWeight: 700,
+                      fontSize: '1rem',
+                      padding: '6px 12px',
+                      width: 70,
+                      outline: 'none',
+                    }}
+                  />
+                </label>
+                <div style={{ color: '#888', fontWeight: 400, fontFamily: 'monospace', marginTop: 8, textAlign: 'center', fontSize: '0.95rem', width: '100%' }}>
+                  Warning: running trials takes a surprisingly long time, please keep trials to &lt; 10 unless there's a really fricken good reason
+                </div>
+              </div>
               {statsLoading && <div style={{color:'#ffff00', fontWeight:700, marginBottom:16}}>Running random routes for all cities and tiers...</div>}
               {statsResults.length > 0 && (
                 <div className="stats-table-container">
