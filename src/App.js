@@ -430,10 +430,10 @@ function App() {
   const randomizeCoordinates = () => {
     const bounds = getCityBounds(selectedCity);
     const { minLat, maxLat, minLon, maxLon } = bounds;
-    const randomLat1 = (Math.random() * (maxLat - minLat) + minLat).toFixed(4);
-    const randomLon1 = (Math.random() * (maxLon - minLon) + minLon).toFixed(4);
-    const randomLat2 = (Math.random() * (maxLat - minLat) + minLat).toFixed(4);
-    const randomLon2 = (Math.random() * (maxLon - minLon) + minLon).toFixed(4);
+    const randomLat1 = (Math.random() * (maxLat - minLat) + minLat).toFixed(8);
+    const randomLon1 = (Math.random() * (maxLon - minLon) + minLon).toFixed(8);
+    const randomLat2 = (Math.random() * (maxLat - minLat) + minLat).toFixed(8);
+    const randomLon2 = (Math.random() * (maxLon - minLon) + minLon).toFixed(8);
     setStartLat(randomLat1);
     setStartLon(randomLon1);
     setEndLat(randomLat2);
@@ -506,10 +506,10 @@ function App() {
   async function runSingleTrial(city) {
     const bounds = getCityBounds(city);
     const { minLat, maxLat, minLon, maxLon } = bounds;
-    const randomLat1 = (Math.random() * (maxLat - minLat) + minLat).toFixed(4);
-    const randomLon1 = (Math.random() * (maxLon - minLon) + minLon).toFixed(4);
-    const randomLat2 = (Math.random() * (maxLat - minLat) + minLat).toFixed(4);
-    const randomLon2 = (Math.random() * (maxLon - minLon) + minLon).toFixed(4);
+    const randomLat1 = (Math.random() * (maxLat - minLat) + minLat).toFixed(8);
+    const randomLon1 = (Math.random() * (maxLon - minLon) + minLon).toFixed(8);
+    const randomLat2 = (Math.random() * (maxLat - minLat) + minLat).toFixed(8);
+    const randomLon2 = (Math.random() * (maxLon - minLon) + minLon).toFixed(8);
     // Use the same API logic as getDirections
     const requestBody = {
       origin: { location: { latLng: { latitude: parseFloat(randomLat1), longitude: parseFloat(randomLon1) } } },
