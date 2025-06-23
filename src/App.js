@@ -559,7 +559,7 @@ function App() {
     for (const tier of tiers) {
       for (const city of Object.keys(cityBounds).filter(c => cityBounds[c].tier === tier)) {
         const cityResults = [];
-        for (let i = 0; i < 30; ++i) {
+        for (let i = 0; i < 10; ++i) {
           const trial = await runSingleTrial(city);
           if (trial) cityResults.push(trial);
         }
@@ -742,44 +742,49 @@ function App() {
                 </div>
               </div>
             )}
+            <div style={{ textAlign: 'center', padding: '20px 0', color: '#9ca5b3', fontFamily: 'monospace' }}>
+              Created by Ben Goldston
+            </div>
           </React.Fragment>
         ) : (
-          <div className="stats-placeholder">
-            <h2>Directions Stats</h2>
-            <button className="btn btn-primary" onClick={runAllTrials} disabled={statsLoading} style={{marginBottom: 32}}>
-              {statsLoading ? 'Running Trials...' : 'Run Trials'}
-            </button>
-            {statsLoading && <div style={{color:'#ffff00', fontWeight:700, marginBottom:16}}>Running experiments for all cities and tiers...</div>}
-            {statsResults.length > 0 && (
-              <div className="stats-table-container">
-                <TierSummaryBox results={statsResults} />
-                <table className="stats-table">
-                  <thead>
-                    <tr>
-                      <th>Tier</th>
-                      <th>City</th>
-                      <th>Avg Distance (km)</th>
-                      <th>Avg Complex Steps</th>
-                      <th>Avg Reference Steps</th>
-                      <th>Avg Total Steps</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {statsResults.map(r => (
-                      <tr key={r.city}>
-                        <td>{r.tier}</td>
-                        <td>{r.city}</td>
-                        <td>{r.avgDistance}</td>
-                        <td>{r.avgComplex}</td>
-                        <td>{r.avgReference}</td>
-                        <td>{r.avgTotal}</td>
+          <React.Fragment>
+            <div className="stats-placeholder">
+              <h2>Directions Stats</h2>
+              <button className="btn btn-primary" onClick={runAllTrials} disabled={statsLoading} style={{marginBottom: 32}}>
+                {statsLoading ? 'Running Trials...' : 'Run Trials'}
+              </button>
+              {statsLoading && <div style={{color:'#ffff00', fontWeight:700, marginBottom:16}}>Running random routes for all cities and tiers...</div>}
+              {statsResults.length > 0 && (
+                <div className="stats-table-container">
+                  <TierSummaryBox results={statsResults} />
+                  <table className="stats-table">
+                    <thead>
+                      <tr>
+                        <th>Tier</th>
+                        <th>City</th>
+                        <th>Avg Distance (km)</th>
+                        <th>Avg Complex Steps</th>
+                        <th>Avg Reference Steps</th>
+                        <th>Avg Total Steps</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
+                    </thead>
+                    <tbody>
+                      {statsResults.map(r => (
+                        <tr key={r.city}>
+                          <td>{r.tier}</td>
+                          <td>{r.city}</td>
+                          <td>{r.avgDistance}</td>
+                          <td>{r.avgComplex}</td>
+                          <td>{r.avgReference}</td>
+                          <td>{r.avgTotal}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </React.Fragment>
         )}
       </div>
     </div>
